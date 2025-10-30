@@ -1,82 +1,82 @@
-// The 'puppeteer' library is required to launch a headless browser.
-import * as puppeteer from 'puppeteer';
+import { IncomingMessage, ServerResponse } from 'http';
 
-// Define the target URL as a constant with explicit string type.
-const TARGET_URL: string = 'https://www.mangago.zone/chapter/34831/472531/';
-
-// Interface for the structured data returned by the scrape function
+// Define the structured type for the data we want to return
 interface MangaPage {
   page_id: string | null;
   image_url: string;
   page_number: number;
 }
 
-/**
- * Launches a headless browser, navigates to the URL, and scrapes image data.
- * @param url The URL of the manga chapter page to scrape.
- * @returns A promise that resolves to an array of scraped image data (MangaPage[]).
- */
-async function scrape(url: string): Promise<MangaPage[] | { error: string }> {
-  let browser: puppeteer.Browser | undefined;
+// Define the structured type for the full response object
+type ScrapeResult = MangaPage[] | { error: string };
 
-  try {
-    // Launch the browser instance
-    browser = await puppeteer.launch();
-    const page = await browser.newPage();
+// --- MOCK Scrape Function (Simulates your original Puppeteer logic) ---
+// Note: This function replaces your actual Puppeteer code for deployment safety.
+async function mockScrape(url: string): Promise<ScrapeResult> {
+  console.log(`[MOCK] Simulating heavy scraping task for URL: ${url}`);
 
-    // Set necessary headers to mimic a regular browser visit
-    await page.setExtraHTTPHeaders({
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-    });
-
-    // Navigate to the target page, waiting for network activity to settle
-    await page.goto(url, {
-      waitUntil: 'networkidle2',
-      timeout: 30000, // 30-second timeout
-    });
-
-    console.log(`Successfully fetched ${url}`);
-
-    // Execute code within the browser's context (page.evaluate)
-    const imageScrape: MangaPage[] = await page.evaluate(() => {
-      const results: MangaPage[] = [];
-      let pageCounter: number = 1;
-      const selector: string = '#pic_container img';
-
-      // Iterate over all image elements matching the selector
-      document.querySelectorAll<HTMLImageElement>(selector).forEach((el) => {
-        const imageUrl = el.getAttribute('src');
-        const pageId = el.getAttribute('id');
-
-        // Only process images that have a source and are not placeholder loaders
-        if (imageUrl && !imageUrl.includes('ajax-loader2.gif')) {
-          results.push({
-            page_id: pageId,
-            image_url: imageUrl,
-            page_number: pageCounter,
-          });
-          pageCounter++;
-        }
-      });
-      return results;
-    });
-
-    console.log(imageScrape);
-    return imageScrape;
-  } catch (error: any) {
-    console.error(`Error while scraping: ${error.message}`);
-    // Return an object containing the error message upon failure
-    return {
-      error: `Scraping failed: ${error.message}`,
-    };
-  } finally {
-    // Ensure the browser is closed whether scraping succeeded or failed
-    if (browser) {
-      await browser.close();
-    }
+  // Simulate success
+  if (url.includes('mangago.zone')) {
+    await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate network delay
+    return [
+      {
+        page_id: 'p1',
+        image_url: 'https://mock.com/img/page-01.jpg',
+        page_number: 1,
+      },
+      {
+        page_id: 'p2',
+        image_url: 'https://mock.com/img/page-02.jpg',
+        page_number: 2,
+      },
+      {
+        page_id: 'p3',
+        image_url: 'https://mock.com/img/page-03.jpg',
+        page_number: 3,
+      },
+    ];
   }
+
+  // Simulate failure
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  return { error: 'Mock scraping failed for invalid URL.' };
 }
 
-// Execute the main function
-scrape(TARGET_URL);
+/**
+ * The Vercel Serverless Entry Point (HTTP Handler)
+ * This function waits for the scraping to complete and sends the result as JSON.
+ * * @param req The incoming HTTP request.
+ * @param res The outgoing HTTP response.
+ */
+export default async function handler(
+  req: IncomingMessage,
+  res: ServerResponse
+): Promise<void> {
+  // 1. Define the target URL (could also be pulled from req.query)
+  const TARGET_URL: string = 'https://www.mangago.zone/chapter/34831/472531/';
+
+  try {
+    // 2. Await the result of the (mocked) asynchronous scrape function
+    const data = await mockScrape(TARGET_URL);
+
+    // 3. Check if the result is an error object
+    if ('error' in data) {
+      res.statusCode = 500;
+    } else {
+      res.statusCode = 200;
+    }
+
+    // 4. Set the header to indicate we are sending JSON
+    res.setHeader('Content-Type', 'application/json');
+
+    // 5. Convert the data to a JSON string and send the response
+    res.end(JSON.stringify(data));
+  } catch (error: any) {
+    console.error('Handler Error:', error);
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(
+      JSON.stringify({ error: 'Internal server error during processing.' })
+    );
+  }
+}
